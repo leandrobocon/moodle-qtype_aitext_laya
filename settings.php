@@ -91,6 +91,7 @@ if ($ADMIN->fulltree) {
     ));
     // Define the choices for the radio buttons.
     $backends = [
+        'laya' => get_string('layabackend', 'qtype_aitext'),
         'local_ai_manager' => get_string('localaimanager', 'qtype_aitext'),
         'core_ai_subsystem' => get_string('coreaisubsystem', 'qtype_aitext'),
         'tool_aimanager' => get_string('toolaimanager', 'qtype_aitext'),
@@ -102,6 +103,21 @@ if ($ADMIN->fulltree) {
         get_string('backends_text', 'qtype_aitext'),
         'core_ai_subsystem',
         $backends
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'qtype_aitext/laya_endpoint',
+        new lang_string('laya_endpoint', 'qtype_aitext'),
+        new lang_string('laya_endpoint_setting', 'qtype_aitext'),
+        'http://laya_service:8000/v1/grade',
+        PARAM_URL
+    ));
+
+    $settings->add(new admin_setting_configpasswordunmask(
+        'qtype_aitext/laya_apikey',
+        new lang_string('laya_apikey', 'qtype_aitext'),
+        new lang_string('laya_apikey_setting', 'qtype_aitext'),
+        'sk-laya-local-actionandlearning'
     ));
 
     $settings->add(new admin_setting_configcheckbox(

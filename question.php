@@ -267,7 +267,54 @@ class qtype_aitext_question extends question_graded_automatically {
         }
         $contextid = $this->get_contextid_for_ai_request();
         $backend = get_config('qtype_aitext', 'backend');
-        if ($backend == 'local_ai_manager') {
+        if ($backend == 'laya') {
+            $endpoint = get_config('qtype_aitext', 'laya_endpoint') ?: 'http://laya_service:8000/v1/grade';
+            $apikey = get_config('qtype_aitext', 'laya_apikey') ?: '';
+
+            $headers = ['Content-Type: application/json'];
+            if (!empty($apikey)) {
+                $headers[] = 'Authorization: Bearer ' . $apikey;
+            }
+
+            $payload = json_encode([
+                'prompt' => $prompt,
+                'questiontext' => $this->questiontext ?? '',
+                'aiprompt' => $this->aiprompt ?? '',
+                'markscheme' => $this->markscheme ?? '',
+                'defaultmark' => (float) ($this->defaultmark ?? 100.0)
+            ]);
+
+            $ch = curl_init($endpoint);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            $rawresponse = curl_exec($ch);
+            $curlerror = curl_error($ch);
+            $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($rawresponse === false || !empty($curlerror)) {
+                throw new moodle_exception('err_retrievingfeedback', 'qtype_aitext', '', $curlerror ?: 'Connection failed');
+            }
+
+            $decoded = json_decode($rawresponse, true);
+            if (isset($decoded['error'])) {
+                throw new moodle_exception('err_retrievingfeedback', 'qtype_aitext', '', $decoded['error']);
+            }
+
+            $this->modelused = 'laya-system1';
+
+            if (isset($decoded['marks']) && isset($decoded['feedback'])) {
+                return json_encode([
+                    'marks' => $decoded['marks'],
+                    'feedback' => $decoded['feedback']
+                ]);
+            }
+
+            return $rawresponse;
+        } else if ($backend == 'local_ai_manager') {
             $manager = new local_ai_manager\manager($purpose);
             $llmresponse = (object) $manager->perform_request($prompt, 'qtype_aitext', $contextid);
             if ($llmresponse->get_code() !== 200) {
@@ -648,6 +695,9 @@ class qtype_aitext_question extends question_graded_automatically {
      */
     protected function llm_translate(string $text): string {
         if (current_language() == 'en') {
+            return $text;
+        }
+        if (get_config('qtype_aitext', 'backend') === 'laya') {
             return $text;
         }
         if (get_config('qtype_aitext', 'translatepostfix') == 0) {
