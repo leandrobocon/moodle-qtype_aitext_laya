@@ -67,47 +67,121 @@ If the configured AI tools are unavailable, grading degrades gracefully instead 
 
 AI-generated feedback can be shown to a human grader and used as a reference when marking a response manually.
 
-## Installation Guide (Novo Servidor / Production)
+## 📚 Guia de Instalação e Configuração (Novo Servidor / Produção)
 
-### 1. Instalação do Plugin no Moodle
-Clone o repositório na pasta de question types do seu Moodle:
+Este guia orienta o provisionamento completo do plugin e do motor de decisão **Laya** em um novo servidor. A arquitetura é composta por:
+1. **Microsserviço Laya:** API local de alta performance baseada em System 1 (ModernBERT + RLCD) que avalia o texto sem gerar alucinações.
+2. **Plugin Moodle (`qtype_aitext`):** O tipo de questão dissertativa com IA.
+3. **Question Behaviours:** Os 2 companion plugins necessários para o ciclo de vida da tentativa no Moodle.
 
+---
+
+### Passo 1: Subir o Microsserviço Laya
+
+O serviço do Laya pode rodar no mesmo host do Moodle ou em outro servidor conectado via rede/Docker.
+
+#### Opção A: Via Docker Compose (Recomendado)
 ```bash
-cd /caminho/do/moodle/question/type
-git clone https://github.com/leandrobocon/moodle-qtype_aitext_laya.git aitext
-```
+# 1. Acesse a pasta do serviço
+cd /caminho/do/repositorio/service
 
-Instale também os dois comportamentos de questão obrigatórios (companion plugins):
-```bash
-cd /caminho/do/moodle/question/behaviour
-git clone https://github.com/marcusgreen/moodle-qbehaviour_deferred_for_aitext.git deferred_for_aitext
-git clone https://github.com/marcusgreen/moodle-qbehaviour_immediate_for_aitext.git immediate_for_aitext
-```
-
-Execute a atualização do banco de dados do Moodle:
-```bash
-php admin/cli/upgrade.php --non-interactive
-```
-
-### 2. Inicialização do Microsserviço Laya
-No servidor onde o Laya será executado (pode ser o mesmo servidor do Moodle ou outro servidor na rede):
-
-```bash
-cd /caminho/do/moodle/question/type/aitext/service
+# 2. Inicie o container
 docker compose up -d --build
+
+# 3. Verifique os logs e a inicialização
+docker compose logs -f
 ```
 
-O serviço Laya subirá na porta `8000`.
+#### Opção B: Via Docker Run (Sem Compose)
+```bash
+docker run -d \
+  --name laya_service \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  -e LAYA_PORT=8000 \
+  -e LAYA_API_KEY="sk-laya-local-actionandlearning" \
+  -v laya_cache:/root/.cache/huggingface \
+  python:3.12-slim bash -c "
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir laya && \
+    python3 /app/server.py
+  "
+```
 
-### 3. Configuração no Painel do Moodle
-No Moodle, acesse como Administrador:
-1. Vá para **Administração do Site ➔ Plugins ➔ Tipos de Questão ➔ AI Text Question** (`/admin/settings.php?section=qtypesettingaitext`).
-2. Em **AI back end systems**, selecione: `Laya Decision Engine (Local)`.
-3. Em **Laya Service Endpoint URL**, informe o endereço do serviço: `http://localhost:8000/v1/grade` (ou o IP/hostname do container, ex: `http://laya_service:8000/v1/grade`).
-4. Em **Laya API Key / Bearer Token**, informe a chave cadastrada (ex: `sk-laya-local-actionandlearning`).
-5. Clique em **Salvar alterações**.
+#### Teste de Saúde do Serviço
+Após inicializar, valide se a API está respondendo:
+```bash
+curl http://localhost:8000/health
+# Resposta esperada: {"status": "healthy", "service": "laya-decision-engine", ...}
+```
 
-Pronto! As questões do tipo AI Text já estarão corrigidas automaticamente pelo Laya.
+---
+
+### Passo 2: Instalar os Plugins no Moodle
+
+O Moodle requer o plugin principal e dois comportamentos de tentativa (`qbehaviour`):
+
+1. **Instalar o tipo de questão (`qtype_aitext`):**
+   ```bash
+   cd /caminho/do/moodle/public/question/type
+   git clone https://github.com/leandrobocon/moodle-qtype_aitext_laya.git aitext
+   chown -R www-data:www-data aitext
+   ```
+
+2. **Instalar os question behaviours obrigatórios:**
+   ```bash
+   cd /caminho/do/moodle/public/question/behaviour
+   git clone https://github.com/marcusgreen/moodle-qbehaviour_deferred_for_aitext.git deferred_for_aitext
+   git clone https://github.com/marcusgreen/moodle-qbehaviour_immediate_for_aitext.git immediate_for_aitext
+   chown -R www-data:www-data deferred_for_aitext immediate_for_aitext
+   ```
+
+3. **Executar a atualização do banco de dados do Moodle:**
+   ```bash
+   sudo -u www-data php /caminho/do/moodle/public/admin/cli/upgrade.php --non-interactive
+   ```
+
+---
+
+### Passo 3: Configurar o Laya no Painel do Moodle
+
+1. Acesse o Moodle com uma conta de Administrador.
+2. Acesse: **Administração do Site ➔ Plugins ➔ Tipos de Questão ➔ AI Text Question**  
+   *(Ou acesse diretamente a URL: `/admin/settings.php?section=qtypesettingaitext`)*
+3. Defina os parâmetros:
+   - **AI back end systems:** Selecione `Laya Decision Engine (Local)`
+   - **Laya Service Endpoint URL:**
+     - Se o Moodle e o Laya estiverem na mesma rede Docker: `http://laya_service:8000/v1/grade`
+     - Se estiverem no mesmo servidor físico (fora do Docker): `http://127.0.0.1:8000/v1/grade`
+     - Se estiverem em servidores separados na rede interna: `http://<IP_DO_SERVIDOR_LAYA>:8000/v1/grade`
+   - **Laya API Key / Bearer Token:** `sk-laya-local-actionandlearning` (ou a chave configurada no `.env` do serviço)
+4. Clique em **Salvar alterações**.
+
+---
+
+### Passo 4: Segurança de Rede do Moodle (cURL Security)
+
+Por padrão de segurança, o Moodle bloqueia conexões cURL para endereços de rede privada e loopback (`127.0.0.1`, `172.x.x.x`, etc.), o que pode causar o erro *"Esta URL está bloqueada"*.
+
+Para liberar o acesso ao microsserviço Laya:
+1. Acesse: **Administração do Site ➔ Segurança ➔ Segurança HTTP** (`/admin/settings.php?section=httpsecurity`).
+2. No campo **Hosts permitidos (cURL allowed hosts)**, adicione o hostname ou IP do Laya:
+   ```text
+   laya_service
+   127.0.0.1
+   172.16.0.0/12
+   localhost
+   ```
+3. Salve as alterações.
+
+---
+
+### Passo 5: Regras de Avaliação do Motor Laya
+
+O motor Laya configurado neste repositório opera sob calibração pedagógica ativa:
+- 🚫 **Fora de Contexto (Off-Topic):** Respostas que tratam de temas alheios à questão (ex: culinária, esportes, piadas, futebol) são detectadas em primeira camada e **zeradas imediatamente (0.0 / 100)**.
+- 🎯 **Respostas Completas e Articuladas:** Respostas que explicam os conceitos fundamentais e exemplificam com ferramentas práticas reais (ex: fóruns, wikis, questionários) são bonificadas com a **nota máxima (100.0 / 100)**.
+- 📝 **Respostas Parciais:** Respostas conceituais sem exemplificação de ferramentas recebem nota proporcional e feedback formativo orientado.
 
 ---
 
