@@ -1,0 +1,28 @@
+services:
+  laya_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: laya-decision-engine:latest
+    container_name: laya_service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - LAYA_PORT=8000
+      - LAYA_API_KEY=sk-laya-local-actionandlearning
+      - HF_HUB_OFFLINE=0 # Defina como 1 apos o primeiro download para operar offline
+    volumes:
+      # Persiste os pesos do modelo Hugging Face baixados
+      - laya_huggingface_cache:/root/.cache/huggingface
+    # Se o seu Moodle estiver em Docker, conecte o container na mesma rede do Moodle:
+    # networks:
+    #   - moodle_network
+
+volumes:
+  laya_huggingface_cache:
+    driver: local
+
+# networks:
+#   moodle_network:
+#     external: true
