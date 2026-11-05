@@ -284,12 +284,14 @@ class qtype_aitext_question extends question_graded_automatically {
                 'defaultmark' => (float) ($this->defaultmark ?? 100.0)
             ]);
 
+            $timeout = (int) (get_config('qtype_aitext', 'laya_timeout') ?: 180);
             $ch = curl_init($endpoint);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
             $rawresponse = curl_exec($ch);
             $curlerror = curl_error($ch);
             $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

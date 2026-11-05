@@ -120,6 +120,14 @@ if ($ADMIN->fulltree) {
         'sk-laya-local-actionandlearning'
     ));
 
+    $settings->add(new admin_setting_configtext(
+        'qtype_aitext/laya_timeout',
+        new lang_string('laya_timeout', 'qtype_aitext'),
+        new lang_string('laya_timeout_setting', 'qtype_aitext'),
+        180,
+        PARAM_INT
+    ));
+
     $settings->add(new admin_setting_configcheckbox(
         'qtype_aitext/markprompt_required',
         new lang_string('markprompt_required', 'qtype_aitext'),
